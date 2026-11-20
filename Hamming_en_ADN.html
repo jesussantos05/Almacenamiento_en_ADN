@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hamming en ADN</title>
+<style>
+/* Layout: una sola columna de lectura; cada sección responde una pregunta (qué código, qué pasa con un mensaje, cuánto mejora, qué no cubre). */
+:root{
+  --bg:#f2f5f5; --surface:#ffffff; --fg:#13201f; --muted:#52625f; --line:#d3dcdb;
+  --accent:#0a766f; --accent-ink:#ffffff;
+  --a:#23803b; --c:#2a62c4; --g:#3a3f3f; --t:#c8332f;
+  --ok:#1f7a4d; --bad:#c3342d; --plain:#6c7f8f;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,Menlo,"DejaVu Sans Mono",monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1514; --surface:#151e1d; --fg:#e4eeed; --muted:#8fa3a0; --line:#273634;
+    --accent:#4cc9bd; --accent-ink:#06201d;
+    --a:#5ccf7b; --c:#6c9cf0; --g:#c9d1d1; --t:#ff7a73;
+    --ok:#58cf93; --bad:#ff7a73; --plain:#8da2b3; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1514; --surface:#151e1d; --fg:#e4eeed; --muted:#8fa3a0; --line:#273634;
+  --accent:#4cc9bd; --accent-ink:#06201d;
+  --a:#5ccf7b; --c:#6c9cf0; --g:#c9d1d1; --t:#ff7a73;
+  --ok:#58cf93; --bad:#ff7a73; --plain:#8da2b3; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:400 15px/1.55 var(--sans);-webkit-text-size-adjust:100%;margin:0}
+sup,sub{font-size:.72em;line-height:0}
+.wrap{max-width:960px;margin:0 auto;padding-block:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{background:var(--surface);border-bottom:1px solid var(--line)}
+header.top .wrap{padding-block:26px 22px}
+.eyebrow{font:600 12px/1.2 var(--sans);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+h1{font:700 clamp(30px,6vw,44px)/1.05 var(--sans);margin:0 0 10px;letter-spacing:-.015em;text-wrap:balance}
+.lede{max-width:62ch;color:var(--muted);margin:0;font-size:16px}
+main.wrap{padding-block:4px 40px}
+section{padding-top:34px}
+h2{font:700 22px/1.2 var(--sans);margin:0 0 6px;text-wrap:balance}
+h3{font:600 15px/1.3 var(--sans);margin:0 0 8px}
+.sub{color:var(--muted);margin:0 0 16px;max-width:68ch}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;min-width:0}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:720px){.grid2{grid-template-columns:minmax(0,1fr)}}
+dl.spec{display:grid;grid-template-columns:auto minmax(0,1fr);gap:9px 18px;margin:0}
+dl.spec dt{color:var(--muted)}
+dl.spec dd{margin:0;font-family:var(--mono);font-size:14px}
+@media (max-width:520px){dl.spec{grid-template-columns:minmax(0,1fr);gap:0}dl.spec dt{margin-top:10px;font-size:13px}}
+.mono{font-family:var(--mono)}
+.verdict{display:inline-block;font:600 12.5px/1 var(--sans);padding:5px 9px;border-radius:99px;border:1.5px solid currentColor;text-transform:none;letter-spacing:0}
+.verdict.ok{color:var(--ok)} .verdict.no{color:var(--bad)}
+.b{display:inline-grid;place-items:center;width:1.5em;height:1.9em;font:600 .95rem/1 var(--mono);border-radius:3px;color:var(--cl);background:color-mix(in srgb,var(--cl) 13%,transparent)}
+.b.A{--cl:var(--a)} .b.C{--cl:var(--c)} .b.G{--cl:var(--g)} .b.T{--cl:var(--t)}
+.b.x{outline:2px solid var(--bad);outline-offset:-1px;background:color-mix(in srgb,var(--bad) 24%,transparent)}
+.strand{display:flex;flex-wrap:wrap;gap:5px 7px}
+.blk{display:inline-flex;gap:1px;padding:2px;border:1.5px solid transparent;border-radius:6px}
+.blk.fix{border-color:var(--ok)} .blk.fail{border-color:var(--bad);border-style:dashed}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px;color:var(--muted);margin:12px 0 0;align-items:center}
+.legend .b{width:1.2em;height:1.5em;font-size:.8rem}
+.legend .blk{padding:2px 3px}
+.chips{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:0 0 14px;font-size:14px}
+.mat{display:inline-grid;grid-template-columns:repeat(5,2.2em);gap:4px 0;text-align:center;font-family:var(--mono);font-size:15px;padding:4px 6px;border-left:2px solid var(--fg);border-right:2px solid var(--fg);border-radius:5px;margin:4px 0 10px}
+.ctl{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:end;margin-bottom:14px}
+.ctl label{display:flex;flex-direction:column;gap:5px;font-size:13px;color:var(--muted);font-weight:500}
+.ctl .grow{flex:1 1 260px;min-width:0}
+textarea,select,input[type=number]{font:400 15px/1.4 var(--sans);color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 10px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:60px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+button{font:600 14px/1 var(--sans);background:var(--accent);color:var(--accent-ink);border:0;border-radius:7px;padding:11px 15px;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent);border:1.5px solid var(--accent)}
+button:disabled{opacity:.55;cursor:default}
+:is(button,textarea,input,select,summary):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.stats{display:flex;flex-wrap:wrap;gap:4px 20px;margin:0 0 14px;font-size:14px;color:var(--muted)}
+.stats b{font-family:var(--mono);font-weight:600;color:var(--fg)}
+.row{margin:0 0 16px;min-width:0}
+.lab{font:600 12px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.out{font-family:var(--mono);font-size:14.5px;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:10px 12px;overflow-wrap:anywhere;white-space:pre-wrap}
+.out .bad{background:color-mix(in srgb,var(--bad) 26%,transparent);border-radius:2px}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-weight:600;color:var(--muted);font-size:12.5px}
+td{font-family:var(--mono);font-variant-numeric:tabular-nums}
+td.l{font-family:var(--sans)}
+.chart{width:100%;min-width:0}
+.chart svg{display:block;width:100%;height:auto}
+.key{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted);margin:8px 0 0}
+.key i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px;border-radius:2px}
+.key i.dot{height:9px;width:9px;border-radius:50%}
+.note{font-size:13.5px;color:var(--muted);margin:12px 0 0;max-width:74ch}
+details{margin-top:14px} summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:14px}
+footer{padding:26px 0 8px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);margin-top:38px}
+@media (prefers-reduced-motion:no-preference){button{transition:filter .12s}button:hover:not(:disabled){filter:brightness(1.08)}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <p class="eyebrow">Teoría de Códigos · MAT 4215 · Proyecto final · Tema 10</p>
+    <h1>Hamming en ADN</h1>
+    <p class="lede">Un texto se convierte en una hebra de A, C, G y T, se le agrega redundancia, se daña con mutaciones al azar y se recupera.</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="codigo">
+  <h2>El código</h2>
+  <p class="sub">Cada base es un símbolo del cuerpo GF(4), así que el alfabeto tiene q = 4. Un bloque tiene 3 bases de mensaje y 2 de paridad.</p>
+  <div class="grid2">
+    <div class="panel">
+      <dl class="spec" id="spec"></dl>
+    </div>
+    <div class="panel">
+      <p class="lab">Bases como símbolos de GF(4)</p>
+      <div class="chips">
+        <span><span class="b A">A</span> = 0</span>
+        <span><span class="b C">C</span> = 1</span>
+        <span><span class="b G">G</span> = ω</span>
+        <span><span class="b T">T</span> = ω<sup>2</sup> = ω + 1</span>
+      </div>
+      <p class="lab">Matriz de control H</p>
+      <div class="mat" role="img" aria-label="Matriz H de 2 por 5: primera fila 1 1 1 1 0, segunda fila 1 ω ω cuadrado 0 1">
+        <span>1</span><span>1</span><span>1</span><span>1</span><span>0</span>
+        <span>1</span><span>ω</span><span>ω<sup>2</sup></span><span>0</span><span>1</span>
+      </div>
+      <p class="note" style="margin-top:0">Al recibir y se calcula el síndrome s = H·y<sup>T</sup>. Si s = 0, no se detecta error. Si no, s = e · (columna j de H): hay un error de tamaño e en la posición j, y se corrige sumando e.</p>
+    </div>
+  </div>
+</section>
+
+<section id="demo">
+  <h2>Demostración</h2>
+  <p class="sub">Escribe un mensaje y mueve la probabilidad de que cada base cambie. Se compara con guardar el mismo texto sin código.</p>
+  <div class="panel">
+    <div class="ctl">
+      <label class="grow">Mensaje
+        <textarea id="txt" maxlength="120" rows="2">Teoría de Códigos - Uninorte</textarea>
+      </label>
+      <label class="grow">Probabilidad de sustitución p = <span class="mono" id="pv"></span>
+        <input type="range" id="p" min="0" max="0.2" step="0.005" value="0.04">
+      </label>
+      <label style="width:110px">Semilla
+        <input type="number" id="seed" value="4" min="0" step="1">
+      </label>
+      <button class="ghost" id="reseed" type="button">Otro azar</button>
+    </div>
+    <p class="stats" id="stats"></p>
+    <div class="row"><p class="lab">Hebra enviada</p><div class="strand" id="sent"></div></div>
+    <div class="row"><p class="lab">Hebra recibida</p><div class="strand" id="recv"></div>
+      <div class="legend">
+        <span class="blk"><span class="b A">A</span><span class="b C">C</span></span> sin errores
+        <span class="blk fix"><span class="b A">A</span><span class="b x C">C</span></span> 1 error, corregido
+        <span class="blk fail"><span class="b x A">A</span><span class="b x C">C</span></span> 2 o más, no se corrige
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="row"><p class="lab">Con código <span id="v1"></span></p><div class="out" id="o1"></div></div>
+      <div class="row"><p class="lab">Sin código <span id="v2"></span></p><div class="out" id="o2"></div></div>
+    </div>
+    <p class="note" id="demoNote"></p>
+  </div>
+</section>
+
+<section id="experimento">
+  <h2>Experimento</h2>
+  <p class="sub">Se codifican mensajes al azar de 100 bytes, se dañan con varios valores de p y se cuenta el resultado. Las líneas punteadas son la fórmula teórica.</p>
+  <div class="panel">
+    <div class="ctl">
+      <button id="run" type="button">Repetir simulación</button>
+      <span class="mono" id="prog" style="font-size:13px;color:var(--muted)"></span>
+    </div>
+    <div class="grid2">
+      <div>
+        <h3>Error por base tras decodificar</h3>
+        <div class="chart" id="ch1"></div>
+        <div class="key"><span><i style="background:var(--plain)"></i>sin código (≈ p)</span><span><i style="background:var(--accent)"></i>Hamming (5, 3)<sub>4</sub></span></div>
+      </div>
+      <div>
+        <h3>Mensajes recuperados exactos (%)</h3>
+        <div class="chart" id="ch2"></div>
+        <div class="key"><span><i class="dot" style="background:var(--plain)"></i>sin código</span><span><i class="dot" style="background:var(--accent)"></i>con código</span></div>
+      </div>
+    </div>
+    <details>
+      <summary>Ver tabla de resultados</summary>
+      <div class="scroll" style="margin-top:8px"><table id="tbl"></table></div>
+    </details>
+    <p class="note" id="expNote"></p>
+  </div>
+</section>
+
+<footer>Proyecto final de Teoría de Códigos (MAT 4215), Tema 10. Esta página funciona sin conexión a internet.</footer>
+</main>
+
+<script>
+/*CORE-START*/
+const BASES = 'ACGT';
+const MUL = [[0,0,0,0],[0,1,2,3],[0,2,3,1],[0,3,1,2]];
+const N = 5, K = 3;
+const H = [[1,1,1,1,0],[1,2,3,0,1]];
+const gfMul = (a, b) => MUL[a][b];
+
+function encBlock(m){
+  return [m[0], m[1], m[2], m[0]^m[1]^m[2], m[0]^gfMul(2,m[1])^gfMul(3,m[2])];
+}
+function syndrome(y){
+  return H.map(row => row.reduce((acc, h, j) => acc ^ gfMul(h, y[j]), 0));
+}
+function decBlock(y){
+  const s = syndrome(y), z = y.slice();
+  if (s[0] === 0 && s[1] === 0) return {m: z.slice(0,K), fixed: false};
+  for (let j = 0; j < N; j++) for (let e = 1; e <= 3; e++){
+    if (gfMul(e,H[0][j]) === s[0] && gfMul(e,H[1][j]) === s[1]){ z[j] ^= e; return {m: z.slice(0,K), fixed: true}; }
+  }
+  throw new Error('síndrome imposible');
+}
+
+let maskCache = [], maskX = 2024;
+function mask(len){
+  while (maskCache.length < len){
+    maskX = (Math.imul(1103515245, maskX) + 12345) & 0x7fffffff;
+    maskCache.push((maskX >> 16) & 3);
+  }
+  return maskCache.slice(0, len);
+}
+
+function bytesToSyms(b){ const s = []; for (const x of b) s.push((x>>6)&3,(x>>4)&3,(x>>2)&3,x&3); return s; }
+function symsToBytes(s){ const o = []; for (let i = 0; i + 4 <= s.length; i += 4) o.push((s[i]<<6)|(s[i+1]<<4)|(s[i+2]<<2)|s[i+3]); return Uint8Array.from(o); }
+const symsToStrand = s => s.map(x => BASES[x]).join('');
+const strandToSyms = h => Array.from(h, c => BASES.indexOf(c));
+
+function encode(data, scramble = true){
+  const payload = Uint8Array.from([data.length >> 8, data.length & 255, ...data]);
+  let sim = bytesToSyms(payload);
+  while (sim.length % K) sim.push(0);
+  if (scramble){ const m = mask(sim.length); sim = sim.map((v,i) => v ^ m[i]); }
+  const out = [];
+  for (let i = 0; i < sim.length; i += K) out.push(...encBlock(sim.slice(i, i+K)));
+  return symsToStrand(out);
+}
+function decode(strand, scramble = true, nBytes = null){
+  let y = strandToSyms(strand);
+  y = y.slice(0, y.length - y.length % N);
+  let sim = [], fixed = 0;
+  for (let i = 0; i < y.length; i += N){
+    const r = decBlock(y.slice(i, i+N)); sim.push(...r.m); if (r.fixed) fixed++;
+  }
+  if (scramble){ const m = mask(sim.length); sim = sim.map((v,i) => v ^ m[i]); }
+  const payload = symsToBytes(sim);
+  const len = nBytes === null ? (payload[0] << 8 | payload[1]) : nBytes;
+  return {bytes: payload.slice(2, 2 + len), fixed};
+}
+const encodePlain = data => symsToStrand(bytesToSyms(data));
+const decodePlain = strand => symsToBytes(strandToSyms(strand));
+
+const probBlock = p => 1 - Math.pow(1-p, N) - N*p*Math.pow(1-p, N-1);
+function capacity(p){ return p <= 0 ? 2 : 2 + p*Math.log2(p/3) + (1-p)*Math.log2(1-p); }
+
+function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function mutate(strand, p, rng){
+  const out = [], pos = [];
+  for (let i = 0; i < strand.length; i++){
+    const b = strand[i];
+    if (rng() < p){ const others = BASES.split('').filter(x => x !== b); out.push(others[Math.floor(rng()*3)]); pos.push(i); }
+    else out.push(b);
+  }
+  return {out: out.join(''), pos};
+}
+
+/* Verificación por fuerza bruta de los parámetros (n, M, d)_q */
+function verify(){
+  const words = [];
+  for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) for (let c = 0; c < 4; c++) words.push(encBlock([a,b,c]));
+  let d = Infinity;
+  for (let i = 0; i < words.length; i++) for (let j = i+1; j < words.length; j++){
+    let k = 0; for (let x = 0; x < N; x++) if (words[i][x] !== words[j][x]) k++;
+    if (k < d) d = k;
+  }
+  const t = Math.floor((d-1)/2), ball = 1 + N*3;
+  let allOk = true;
+  for (const w of words) for (let j = 0; j < N; j++) for (let e = 1; e <= 3; e++){
+    const y = w.slice(); y[j] ^= e;
+    if (decBlock(y).m.join() !== w.slice(0,K).join()) allOk = false;
+  }
+  return {n: N, M: words.length, d, q: 4, t, ball, prod: words.length*ball, qn: Math.pow(4,N), allOk};
+}
+/*CORE-END*/
+
+/* ---------- Interfaz ---------- */
+const $ = id => document.getElementById(id);
+const fmt = (x, d = 2) => x.toFixed(d).replace('.', ',');
+function el(tag, cls, text){ const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+const enc = new TextEncoder(), dec = new TextDecoder('utf-8');
+
+function renderSpec(){
+  const v = verify();
+  const rows = [
+    ['(n, M, d)<sub>q</sub>', `(${v.n}, ${v.M}, ${v.d})<sub>${v.q}</sub>`],
+    ['Corrige', `t = ⌊(d − 1)/2⌋ = ${v.t} sustitución por bloque`],
+    ['Rata R = k/n', '3/5 = 0,6 (1,2 bits por base)'],
+    ['Hamming', `M · |B<sub>1</sub>| = ${v.M} · ${v.ball} = ${v.prod} = 4<sup>5</sup>`],
+    ['Perfecto', v.prod === v.qn ? 'sí (se cumple la igualdad)' : 'no'],
+    ['Comprobación', v.allOk ? 'corrige todo error simple (64 palabras × 15 errores)' : 'falla'],
+  ];
+  const dl = $('spec'); dl.replaceChildren();
+  for (const [a, b] of rows){ const dt = el('dt'); dt.innerHTML = a; const dd = el('dd'); dd.innerHTML = b; dl.append(dt, dd); }
+}
+
+function strandView(box, strand, ref, statuses){
+  box.replaceChildren();
+  for (let i = 0; i < strand.length; i += N){
+    const blk = el('span', 'blk' + (statuses ? ' ' + statuses[i / N] : ''));
+    for (let j = i; j < i + N && j < strand.length; j++){
+      const bad = ref && ref[j] !== strand[j];
+      const c = el('span', 'b ' + strand[j] + (bad ? ' x' : ''), strand[j]);
+      if (bad) c.title = `enviada ${ref[j]}, recibida ${strand[j]}`;
+      blk.append(c);
+    }
+    box.append(blk);
+  }
+}
+function textView(box, got, want){
+  box.replaceChildren();
+  const g = Array.from(got), w = Array.from(want);
+  g.forEach((ch, i) => box.append(el('span', ch !== w[i] ? 'bad' : '', ch)));
+  if (!g.length) box.textContent = '(vacío)';
+}
+function setVerdict(id, ok){ $(id).replaceChildren(el('span', 'verdict ' + (ok ? 'ok' : 'no'), ok ? 'recuperado exacto' : 'no se recuperó')); }
+
+function demo(){
+  const text = $('txt').value, p = parseFloat($('p').value), seed = parseInt($('seed').value || '0', 10);
+  $('pv').textContent = fmt(p, 3);
+  const data = enc.encode(text);
+  const sent = encode(data);
+  const m1 = mutate(sent, p, mulberry32(seed));
+  const r = decode(m1.out);
+  const nb = sent.length / N, st = [];
+  let fix = 0, fail = 0;
+  for (let b = 0; b < nb; b++){
+    let e = 0; for (let j = b*N; j < b*N + N; j++) if (m1.out[j] !== sent[j]) e++;
+    st.push(e === 0 ? '' : e === 1 ? 'fix' : 'fail'); if (e === 1) fix++; if (e > 1) fail++;
+  }
+  const stats = $('stats'); stats.replaceChildren();
+  for (const [k, v] of [['mensaje', data.length + ' bytes'], ['hebra', sent.length + ' bases'], ['sustituciones', m1.pos.length], ['corregidos', fix], ['sin corregir', fail]]){
+    const s = el('span'); s.append(k + ' '); s.append(el('b', '', String(v))); stats.append(s);
+  }
+  strandView($('sent'), sent, null, null);
+  strandView($('recv'), m1.out, sent, st);
+  const got = dec.decode(r.bytes);
+  textView($('o1'), got, text);
+  setVerdict('v1', got === text && r.bytes.length === data.length);
+
+  const plain = encodePlain(data);
+  const m2 = mutate(plain, p, mulberry32(seed + 1));
+  const d2 = decodePlain(m2.out);
+  textView($('o2'), dec.decode(d2), text);
+  setVerdict('v2', d2.length === data.length && d2.every((x, i) => x === data[i]));
+  $('demoNote').textContent = text.length
+    ? `Sin código: ${plain.length} bases y ${m2.pos.length} sustituciones. Con código: ${sent.length} bases (${fmt(sent.length / plain.length, 2)} veces más) y ${m1.pos.length} sustituciones. Un bloque solo falla con 2 o más errores.`
+    : 'Escribe un mensaje para ver la hebra.';
+}
+
+/* ---------- Experimento ---------- */
+let exp = null;
+function sci(e){ return e === 0 ? '1' : `10<tspan dy="-5" font-size="8">${e < 0 ? '−' : ''}${Math.abs(e)}</tspan>`; }
+function chart(box, o){
+  const W = Math.max(280, box.clientWidth || 320), Ht = 270, m = {l: 48, r: 10, t: 10, b: 40};
+  const iw = W - m.l - m.r, ih = Ht - m.t - m.b;
+  const X = v => m.l + (v - o.xmin) / (o.xmax - o.xmin) * iw;
+  let Y;
+  if (o.log){ const lo = Math.log10(o.ymin), hi = Math.log10(o.ymax); Y = v => m.t + ih - (Math.log10(v) - lo) / (hi - lo) * ih; }
+  else Y = v => m.t + ih - (v - o.ymin) / (o.ymax - o.ymin) * ih;
+  let s = `<svg viewBox="0 0 ${W} ${Ht}" role="img" aria-label="${o.label}" font-family="system-ui,Segoe UI,Arial,sans-serif" font-size="11">`;
+  for (const t of o.yticks){ const y = Y(t); s += `<line x1="${m.l}" x2="${W-m.r}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${m.l-6}" y="${y+4}" text-anchor="end" fill="var(--muted)">${o.ylabel(t)}</text>`; }
+  for (const t of o.xticks){ const x = X(t); s += `<line x1="${x}" x2="${x}" y1="${m.t}" y2="${m.t+ih}" stroke="var(--line)" stroke-opacity=".5"/><text x="${x}" y="${m.t+ih+16}" text-anchor="middle" fill="var(--muted)">${fmt(t,2)}</text>`; }
+  s += `<text x="${m.l+iw/2}" y="${Ht-6}" text-anchor="middle" fill="var(--muted)">p (probabilidad de sustitución por base)</text>`;
+  for (const se of o.series){
+    const pts = o.xs.map((x, i) => [x, se.ys[i]]).filter(q => q[1] > 0 || !o.log);
+    const path = pts.map((q, i) => (i ? 'L' : 'M') + X(q[0]).toFixed(1) + ' ' + Y(Math.max(q[1], o.ymin)).toFixed(1)).join(' ');
+    if (se.line) s += `<path d="${path}" fill="none" stroke="${se.color}" stroke-width="${se.w || 2}" ${se.dash ? 'stroke-dasharray="4 3"' : ''}/>`;
+    if (se.dots) for (const q of pts) s += `<circle cx="${X(q[0]).toFixed(1)}" cy="${Y(Math.max(q[1], o.ymin)).toFixed(1)}" r="3.6" fill="${se.color}"/>`;
+  }
+  box.innerHTML = s + '</svg>';
+}
+function drawCharts(){
+  if (!exp) return;
+  const xs = exp.ps, xt = [0, 0.05, 0.1, 0.15];
+  let lo = 1e-4;
+  const pos = exp.errCod.filter(v => v > 0);
+  if (pos.length){ const mn = Math.min(...pos); if (mn < 1e-4) lo = Math.pow(10, Math.floor(Math.log10(mn))); }
+  const decades = []; for (let e = Math.round(Math.log10(lo)); e <= 0; e++) decades.push(Math.pow(10, e));
+  chart($('ch1'), {label: 'Tasa de error por base con y sin código', xs, xmin: 0, xmax: 0.16, ymin: lo, ymax: 1, log: true, yticks: decades, xticks: xt,
+    ylabel: v => sci(Math.round(Math.log10(v))),
+    series: [{ys: exp.errSin, color: 'var(--plain)', line: 1, dots: 1}, {ys: exp.errCod, color: 'var(--accent)', line: 1, dots: 1}]});
+  chart($('ch2'), {label: 'Porcentaje de mensajes recuperados exactos', xs, xmin: 0, xmax: 0.16, ymin: 0, ymax: 100, log: false, yticks: [0,20,40,60,80,100], xticks: xt,
+    ylabel: v => String(v),
+    series: [{ys: exp.teoSin, color: 'var(--muted)', line: 1, w: 1.4, dash: 1}, {ys: exp.teoCod, color: 'var(--muted)', line: 1, w: 1.4, dash: 1},
+             {ys: exp.okSin, color: 'var(--plain)', dots: 1}, {ys: exp.okCod, color: 'var(--accent)', dots: 1}]});
+}
+function drawTable(){
+  const t = $('tbl'); t.replaceChildren();
+  const head = el('thead'), tr = el('tr');
+  for (const h of ['p', 'error/base sin código', 'error/base con código', 'exacto sin código', 'exacto con código', 'capacidad (bits/base)']) tr.append(el('th', '', h));
+  head.append(tr); t.append(head);
+  const body = el('tbody');
+  exp.ps.forEach((p, i) => {
+    const r = el('tr');
+    r.append(el('td','l',fmt(p,3)), el('td','',fmt(exp.errSin[i],4)), el('td','',fmt(exp.errCod[i],5)), el('td','',fmt(exp.okSin[i],1)+' %'), el('td','',fmt(exp.okCod[i],1)+' %'), el('td','',fmt(capacity(p),3)));
+    body.append(r);
+  });
+  t.append(body);
+  $('expNote').textContent = 'La rata del código es 3/5, o sea 1,2 bits por base (sin código son 2). Con p = 0,15 la capacidad del canal (1,15 bits por base) queda por debajo de 1,2: por el teorema de Shannon ningún código con esa rata puede ser confiable ahí.';
+}
+async function runExperiment(){
+  const btn = $('run'); btn.disabled = true;
+  const trials = 400, nb = 100;
+  const ps = [0.005, 0.01, 0.02, 0.03, 0.05, 0.07, 0.10, 0.15];
+  const rng = mulberry32(Date.now() & 0xffffff);
+  const randBytes = n => Uint8Array.from({length: n}, () => Math.floor(rng() * 256));
+  const res = {ps, errSin: [], errCod: [], okSin: [], okCod: [], teoSin: [], teoCod: []};
+  const L = 600, T1 = 20;
+  for (const p of ps){
+    $('prog').textContent = `calculando p = ${fmt(p,3)} …`;
+    await new Promise(r => setTimeout(r, 0));
+    let ec = 0, es = 0;
+    for (let i = 0; i < T1; i++){
+      const d = randBytes(L), ref = bytesToSyms(d);
+      const a = decode(mutate(encode(d), p, rng).out, true, L).bytes;
+      const sa = bytesToSyms(a); for (let k = 0; k < ref.length; k++) if (sa[k] !== ref[k]) ec++;
+      const b = decodePlain(mutate(encodePlain(d), p, rng).out);
+      const sb = bytesToSyms(b); for (let k = 0; k < ref.length; k++) if (sb[k] !== ref[k]) es++;
+    }
+    res.errCod.push(ec / (T1 * 4 * L)); res.errSin.push(es / (T1 * 4 * L));
+    let c = 0, s = 0;
+    for (let i = 0; i < trials; i++){
+      const d = randBytes(nb);
+      const a = decode(mutate(encode(d), p, rng).out).bytes;
+      if (a.length === nb && a.every((x, k) => x === d[k])) c++;
+      const b = decodePlain(mutate(encodePlain(d), p, rng).out);
+      if (b.every((x, k) => x === d[k])) s++;
+    }
+    res.okCod.push(100 * c / trials); res.okSin.push(100 * s / trials);
+    const blocks = Math.ceil(4 * (nb + 2) / 3);
+    res.teoCod.push(100 * Math.pow(1 - probBlock(p), blocks)); res.teoSin.push(100 * Math.pow(1 - p, 4 * nb));
+  }
+  exp = res; drawCharts(); drawTable();
+  $('prog').textContent = ''; btn.disabled = false;
+}
+
+/* ---------- Arranque ---------- */
+renderSpec();
+$('txt').addEventListener('input', demo); $('p').addEventListener('input', demo); $('seed').addEventListener('input', demo);
+$('reseed').addEventListener('click', () => { $('seed').value = Math.floor(Math.random() * 100000); demo(); });
+$('run').addEventListener('click', runExperiment);
+let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(drawCharts, 120); });
+demo();
+setTimeout(runExperiment, 30);
+</script>
+</body>
+</html>
